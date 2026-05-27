@@ -23,8 +23,11 @@ public class KartController : MonoBehaviour
     [SerializeField] private float steeringStrength = 5000f;
     [SerializeField] private float steeringDamping = 10f;
     [SerializeField] private float lateralFriction = 0.95f; // 0 to 1 for VelocityChange
-[SerializeField] private float gravityMultiplier = 2f;
+    [SerializeField] private float gravityMultiplier = 2f;
     [SerializeField] private float downforce = 15000f;
+    [SerializeField] private float steeringDownforce = 5000f;
+    [SerializeField] private float antiRollForce = 5000f;
+    [SerializeField] private Vector3 centerOfMassOffset = new Vector3(0, -0.5f, 0);
 
     [Header("Wheel Visuals")]
 [SerializeField] private Transform[] wheelVisuals; // FL, FR, RL, RR
@@ -44,12 +47,12 @@ public class KartController : MonoBehaviour
 
     void Start()
     {
-if (rb == null) rb = GetComponent<Rigidbody>();
+        if (rb == null) rb = GetComponent<Rigidbody>();
         
         moveAction = InputSystem.actions.FindAction("Accelerate");
         steerAction = InputSystem.actions.FindAction("Steer");
 
-        rb.centerOfMass = new Vector3(0, -0.5f, 0);
+        rb.centerOfMass = centerOfMassOffset;
     }
 
     void Update()
@@ -73,6 +76,10 @@ if (rb == null) rb = GetComponent<Rigidbody>();
             }
         }
 
+        // Apply Anti-Roll Bar
+        ApplyAntiRollBar(0, 1); // Front
+        ApplyAntiRollBar(2, 3); // Rear
+
         float speed = rb.linearVelocity.magnitude;
 
         // 2. Extra Gravity and Downforce
@@ -82,12 +89,30 @@ if (rb == null) rb = GetComponent<Rigidbody>();
         }
         else
         {
-            // Add downforce proportional to speed
-            // Use ForceMode.Force so it's mass-dependent
-            rb.AddForce(-transform.up * downforce * (speed / maxSpeed), ForceMode.Force);
+            // Base downforce
+            float finalDownforce = downforce;
+            
+            // Extra downforce when steering to keep wheels planted
+            finalDownforce += Mathf.Abs(steerInput) * steeringDownforce;
+            
+            rb.AddForce(-transform.up * finalDownforce * (speed / maxSpeed), ForceMode.Force);
         }
 
         ApplySteeringAndFriction();
+    }
+
+    private void ApplyAntiRollBar(int indexL, int indexR)
+    {
+        // Calculate the difference in compression between left and right wheels
+        float travelL = suspensionOffsets[indexL] / suspensionRestLength;
+        float travelR = suspensionOffsets[indexR] / suspensionRestLength;
+
+        float antiRollForceAmount = (travelL - travelR) * antiRollForce;
+
+        if (suspensionOffsets[indexL] > 0)
+            rb.AddForceAtPosition(transform.up * -antiRollForceAmount, wheelAnchors[indexL].position);
+        if (suspensionOffsets[indexR] > 0)
+            rb.AddForceAtPosition(transform.up * antiRollForceAmount, wheelAnchors[indexR].position);
     }
 
     private bool ApplySuspension(int index)
