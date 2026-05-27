@@ -5,22 +5,25 @@ public class KartController : MonoBehaviour
 {
     [Header("Physics Settings")]
     [SerializeField] private Rigidbody rb;
-    [SerializeField] private float acceleration = 30f;
+    [SerializeField] private float acceleration = 60f;
     [SerializeField] private float steeringSpeed = 100f;
-    [SerializeField] private float gravityForce = 40f;
-    [SerializeField] private float dragOnGround = 3f;
+    [SerializeField] private float gravityForce = 35f;
+    [SerializeField] private float dragOnGround = 2.0f;
     [SerializeField] private float dragInAir = 0.5f;
 
     [Header("Visual Alignment")]
     [SerializeField] private Transform visuals;
-    [SerializeField] private float alignmentSpeed = 10f;
-    [SerializeField] private float groundCheckDistance = 0.6f;
+    [SerializeField] private float alignmentSpeed = 15f;
+    [SerializeField] private float groundCheckDistance = 0.85f;
     [SerializeField] private LayerMask groundLayer;
 
     private float moveInput;
     private float steerInput;
     private bool isGrounded;
     private float currentRotation;
+    private Vector3 currentGroundNormal = Vector3.up;
+    private Vector3 rawGroundNormal = Vector3.up;
+    private float groundedBuffer = 0f;
 
     private InputAction moveAction;
     private InputAction steerAction;
@@ -29,25 +32,19 @@ public class KartController : MonoBehaviour
     {
         if (rb == null) rb = GetComponent<Rigidbody>();
         
-        // Setup input from project-wide actions
         moveAction = InputSystem.actions.FindAction("Accelerate");
         steerAction = InputSystem.actions.FindAction("Steer");
 
-        rb.linearDamping = dragOnGround; // Set initial drag
+        rb.linearDamping = dragOnGround;
     }
 
     void Update()
     {
-        // Read input
         moveInput = moveAction.ReadValue<float>();
-        steerInput = steerAction.ReadValue<float>();
+        steerInput = steerInput = steerAction.ReadValue<float>();
 
-        // Handle steering (only rotate if moving or if you want arcade zero-speed turn)
         currentRotation += steerInput * steeringSpeed * Time.deltaTime;
         
-        // Update visual position to match sphere (visuals should be child but we can force it)
-        visuals.position = rb.position;
-
         AlignVisuals();
     }
 
@@ -55,45 +52,58 @@ public class KartController : MonoBehaviour
     {
         CheckGround();
 
-        if (isGrounded)
+        if (isGrounded || groundedBuffer > 0)
         {
             rb.linearDamping = dragOnGround;
 
-            // Apply forward force based on current rotation
-            Vector3 forwardForce = visuals.forward * moveInput * acceleration;
-            rb.AddForce(forwardForce, ForceMode.Acceleration);
+            Quaternion targetRotation = Quaternion.Euler(0, currentRotation, 0);
+            Vector3 projectedForward = Vector3.ProjectOnPlane(targetRotation * Vector3.forward, rawGroundNormal);
+            
+            if (projectedForward != Vector3.zero)
+            {
+                float powerMult = isGrounded ? 1f : 0.6f;
+                Vector3 forwardForce = projectedForward.normalized * moveInput * acceleration * powerMult;
+                rb.AddForce(forwardForce, ForceMode.Acceleration);
+            }
         }
         else
         {
             rb.linearDamping = dragInAir;
-            // Apply extra gravity when in air for snappier landing
-            rb.AddForce(Vector3.down * gravityForce, ForceMode.Acceleration);
         }
+
+        float currentGravity = isGrounded ? gravityForce : gravityForce * 1.5f;
+        rb.AddForce(Vector3.down * currentGravity, ForceMode.Acceleration);
+
+        if (groundedBuffer > 0) groundedBuffer -= Time.fixedDeltaTime;
     }
 
     private void CheckGround()
     {
         RaycastHit hit;
         isGrounded = Physics.Raycast(transform.position, Vector3.down, out hit, groundCheckDistance, groundLayer);
+        
+        if (isGrounded)
+        {
+            rawGroundNormal = hit.normal;
+            groundedBuffer = 0.15f;
+        }
+        else if (groundedBuffer <= 0)
+        {
+            rawGroundNormal = Vector3.up;
+        }
     }
 
     private void AlignVisuals()
     {
-        RaycastHit hit;
-        Vector3 groundNormal = Vector3.up;
+        currentGroundNormal = Vector3.Slerp(currentGroundNormal, rawGroundNormal, 10f * Time.deltaTime);
 
-        if (Physics.Raycast(transform.position, Vector3.down, out hit, groundCheckDistance + 1f, groundLayer))
-        {
-            groundNormal = hit.normal;
-        }
-
-        // Target rotation based on steer and ground normal
         Quaternion targetRotation = Quaternion.Euler(0, currentRotation, 0);
+        Vector3 projectedForward = Vector3.ProjectOnPlane(targetRotation * Vector3.forward, currentGroundNormal);
         
-        // Align forward with ground normal
-        Vector3 projectedForward = Vector3.ProjectOnPlane(targetRotation * Vector3.forward, groundNormal);
-        Quaternion finalRotation = Quaternion.LookRotation(projectedForward, groundNormal);
-
-        visuals.rotation = Quaternion.Slerp(visuals.rotation, finalRotation, alignmentSpeed * Time.deltaTime);
+        if (projectedForward != Vector3.zero)
+        {
+            Quaternion finalRotation = Quaternion.LookRotation(projectedForward, currentGroundNormal);
+            visuals.rotation = Quaternion.Slerp(visuals.rotation, finalRotation, alignmentSpeed * Time.deltaTime);
+        }
     }
 }

@@ -396,7 +396,7 @@ Rigidbody:
   m_ImplicitTensor: 1
   m_UseGravity: 1
   m_IsKinematic: 0
-  m_Interpolate: 0
+  m_Interpolate: 1
   m_Constraints: 112
   m_CollisionDetection: 1
 --- !u!114 &995350377029182733
@@ -412,14 +412,14 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::KartController
   rb: {fileID: 4344281559680019039}
-  acceleration: 30
+  acceleration: 70
   steeringSpeed: 100
-  gravityForce: 40
-  dragOnGround: 3
+  gravityForce: 25
+  dragOnGround: 1.5
   dragInAir: 0.5
   visuals: {fileID: 4646599705307157663}
   alignmentSpeed: 10
-  groundCheckDistance: 0.6
+  groundCheckDistance: 0.9
   groundLayer:
     serializedVersion: 2
     m_Bits: 4294967295
