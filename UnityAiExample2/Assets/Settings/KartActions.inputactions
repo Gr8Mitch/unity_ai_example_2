@@ -86,7 +86,7 @@
                     "id": "2feea3a1-a237-4b6f-ae07-318dced20d41",
                     "path": "1DAxis",
                     "interactions": "",
-                    "processors": "",
+                    "processors": "AxisDeadzone",
                     "groups": "",
                     "action": "Steer",
                     "isComposite": true,

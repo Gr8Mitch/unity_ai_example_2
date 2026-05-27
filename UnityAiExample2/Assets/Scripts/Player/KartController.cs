@@ -8,7 +8,13 @@ public class KartController : MonoBehaviour
     [SerializeField] private float springStrength = 35000f;
     [SerializeField] private float springDamper = 1500f;
     [SerializeField] private float wheelRadius = 0.3f;
-    [SerializeField] private Transform[] wheelAnchors; // FL, FR, RL, RR
+    [SerializeField] private int suspensionSubsteps = 4;
+    [SerializeField] private int suspensionSamples = 3;
+    [SerializeField] private float sampleRadius = 0.15f;
+    [SerializeField] private float forceSmoothing = 0.5f;
+[SerializeField] private Transform[] wheelAnchors; // FL, FR, RL, RR
+
+    private float[] prevSuspensionForces = new float[4];
 
     [Header("Physics Settings")]
     [SerializeField] private Rigidbody rb;
@@ -85,24 +91,71 @@ if (rb == null) rb = GetComponent<Rigidbody>();
     }
 
     private bool ApplySuspension(int index)
-{
+    {
         Transform anchor = wheelAnchors[index];
-        RaycastHit hit;
-        float rayLength = suspensionRestLength + wheelRadius;
+        float radius = Mathf.Max(0.01f, wheelRadius);
+        float rayLength = suspensionRestLength + radius;
+        Vector3 worldUp = transform.up;
         
-        if (Physics.Raycast(anchor.position, -transform.up, out hit, rayLength))
+        float totalOffset = 0;
+        int hitCount = 0;
+
+        // Sample ground at multiple points to smooth out geometry noise
+        for (int s = 0; s < suspensionSamples; s++)
         {
-            float offset = rayLength - hit.distance;
-            suspensionOffsets[index] = offset; // Save for visual update
+            Vector3 samplePos = anchor.position;
+            if (s > 0)
+            {
+                float angle = (s - 1) * (2f * Mathf.PI / (suspensionSamples - 1));
+                Vector3 ringOffset = (transform.forward * Mathf.Cos(angle) + transform.right * Mathf.Sin(angle)) * sampleRadius;
+                samplePos += ringOffset;
+            }
+
+            RaycastHit hit;
+            if (Physics.Raycast(samplePos, -worldUp, out hit, rayLength))
+            {
+                totalOffset += (rayLength - hit.distance);
+                hitCount++;
+            }
+        }
+
+        if (hitCount > 0)
+        {
+            float avgOffset = totalOffset / hitCount;
+            suspensionOffsets[index] = avgOffset; // Save for visual update
             
-            float vel = Vector3.Dot(rb.GetPointVelocity(anchor.position), transform.up);
-            float force = (offset * springStrength) - (vel * springDamper);
+            Vector3 velocityAtPoint = rb.GetPointVelocity(anchor.position);
             
-            rb.AddForceAtPosition(transform.up * force, anchor.position);
+            float springForce = avgOffset * springStrength;
+            float dampingForce = 0;
+            
+            if (suspensionSubsteps > 1)
+            {
+                float stepVelocity = Vector3.Dot(velocityAtPoint, worldUp);
+                float substepDamping = 0;
+                for (int i = 0; i < suspensionSubsteps; i++)
+                {
+                    substepDamping += stepVelocity * springDamper;
+                }
+                dampingForce = substepDamping / suspensionSubsteps;
+            }
+            else
+            {
+                dampingForce = Vector3.Dot(velocityAtPoint, worldUp) * springDamper;
+            }
+
+            float totalForce = springForce - dampingForce;
+
+            float finalForce = Mathf.Lerp(prevSuspensionForces[index], totalForce, 1f - forceSmoothing);
+            prevSuspensionForces[index] = finalForce;
+            finalForce = Mathf.Max(0, finalForce);
+            
+            rb.AddForceAtPosition(worldUp * finalForce, anchor.position, ForceMode.Force);
             return true;
         }
         
         suspensionOffsets[index] = 0;
+        prevSuspensionForces[index] = 0;
         return false;
     }
 
