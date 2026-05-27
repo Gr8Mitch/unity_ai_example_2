@@ -25,9 +25,9 @@ public class SmoothFollowCamera : MonoBehaviour
         if (target == null) return;
 
         // 1. Smooth the target yaw specifically
-        // This prevents the camera from "snapping" or stuttering when the kart turns or vibrates
         float targetYaw = target.eulerAngles.y;
-        currentYaw = Mathf.SmoothDampAngle(currentYaw, targetYaw, ref currentYawVelocity, rotationSmoothTime);
+        float smoothTime = Mathf.Max(0.01f, rotationSmoothTime);
+        currentYaw = Mathf.SmoothDampAngle(currentYaw, targetYaw, ref currentYawVelocity, smoothTime);
 
         // 2. Calculate position based on the smoothed yaw
         Quaternion smoothedRotation = Quaternion.Euler(0, currentYaw, 0);

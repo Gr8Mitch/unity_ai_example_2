@@ -3,107 +3,203 @@ using UnityEngine.InputSystem;
 
 public class KartController : MonoBehaviour
 {
+    [Header("Suspension Settings")]
+    [SerializeField] private float suspensionRestLength = 0.6f;
+    [SerializeField] private float springStrength = 35000f;
+    [SerializeField] private float springDamper = 1500f;
+    [SerializeField] private float wheelRadius = 0.3f;
+    [SerializeField] private Transform[] wheelAnchors; // FL, FR, RL, RR
+
     [Header("Physics Settings")]
     [SerializeField] private Rigidbody rb;
-    [SerializeField] private float acceleration = 60f;
-    [SerializeField] private float steeringSpeed = 100f;
-    [SerializeField] private float gravityForce = 35f;
-    [SerializeField] private float dragOnGround = 2.0f;
-    [SerializeField] private float dragInAir = 0.5f;
+    [SerializeField] private float acceleration = 8000f;
+    [SerializeField] private float maxSpeed = 50f;
+    [SerializeField] private float steeringStrength = 5000f;
+    [SerializeField] private float steeringDamping = 10f;
+    [SerializeField] private float lateralFriction = 0.95f; // 0 to 1 for VelocityChange
+[SerializeField] private float gravityMultiplier = 2f;
+    [SerializeField] private float downforce = 15000f;
 
-    [Header("Visual Alignment")]
+    [Header("Wheel Visuals")]
+[SerializeField] private Transform[] wheelVisuals; // FL, FR, RL, RR
+    [SerializeField] private float maxSteerVisualAngle = 30f;
+
+    [Header("Body Visuals")]
     [SerializeField] private Transform visuals;
-    [SerializeField] private float alignmentSpeed = 15f;
-    [SerializeField] private float groundCheckDistance = 0.85f;
-    [SerializeField] private LayerMask groundLayer;
+    [SerializeField] private float visualTiltAngle = 5f;
+    [SerializeField] private float visualTiltSpeed = 5f;
 
     private float moveInput;
     private float steerInput;
-    private bool isGrounded;
-    private float currentRotation;
-    private Vector3 currentGroundNormal = Vector3.up;
-    private Vector3 rawGroundNormal = Vector3.up;
-    private float groundedBuffer = 0f;
-
     private InputAction moveAction;
     private InputAction steerAction;
+    private float[] suspensionOffsets = new float[4];
+    private float currentSpinAngle;
 
     void Start()
     {
-        if (rb == null) rb = GetComponent<Rigidbody>();
+if (rb == null) rb = GetComponent<Rigidbody>();
         
         moveAction = InputSystem.actions.FindAction("Accelerate");
         steerAction = InputSystem.actions.FindAction("Steer");
 
-        rb.linearDamping = dragOnGround;
+        rb.centerOfMass = new Vector3(0, -0.5f, 0);
     }
 
     void Update()
     {
         moveInput = moveAction.ReadValue<float>();
-        steerInput = steerInput = steerAction.ReadValue<float>();
+        steerInput = steerAction.ReadValue<float>();
 
-        currentRotation += steerInput * steeringSpeed * Time.deltaTime;
-        
-        AlignVisuals();
+        UpdateWheelVisuals();
+        ApplyVisualTilt();
     }
 
     void FixedUpdate()
     {
-        CheckGround();
-
-        if (isGrounded || groundedBuffer > 0)
+        bool isGrounded = false;
+        for (int i = 0; i < wheelAnchors.Length; i++)
         {
-            rb.linearDamping = dragOnGround;
-
-            Quaternion targetRotation = Quaternion.Euler(0, currentRotation, 0);
-            Vector3 projectedForward = Vector3.ProjectOnPlane(targetRotation * Vector3.forward, rawGroundNormal);
-            
-            if (projectedForward != Vector3.zero)
+            if (ApplySuspension(i))
             {
-                float powerMult = isGrounded ? 1f : 0.6f;
-                Vector3 forwardForce = projectedForward.normalized * moveInput * acceleration * powerMult;
-                rb.AddForce(forwardForce, ForceMode.Acceleration);
+                isGrounded = true;
+                ApplyDrivingForces(wheelAnchors[i]);
             }
+        }
+
+        float speed = rb.linearVelocity.magnitude;
+
+        // 2. Extra Gravity and Downforce
+        if (!isGrounded)
+        {
+            rb.AddForce(Vector3.down * Physics.gravity.magnitude * gravityMultiplier, ForceMode.Acceleration);
         }
         else
         {
-            rb.linearDamping = dragInAir;
+            // Add downforce proportional to speed
+            // Use ForceMode.Force so it's mass-dependent
+            rb.AddForce(-transform.up * downforce * (speed / maxSpeed), ForceMode.Force);
         }
 
-        float currentGravity = isGrounded ? gravityForce : gravityForce * 1.5f;
-        rb.AddForce(Vector3.down * currentGravity, ForceMode.Acceleration);
-
-        if (groundedBuffer > 0) groundedBuffer -= Time.fixedDeltaTime;
+        ApplySteeringAndFriction();
     }
 
-    private void CheckGround()
-    {
+    private bool ApplySuspension(int index)
+{
+        Transform anchor = wheelAnchors[index];
         RaycastHit hit;
-        isGrounded = Physics.Raycast(transform.position, Vector3.down, out hit, groundCheckDistance, groundLayer);
+        float rayLength = suspensionRestLength + wheelRadius;
         
-        if (isGrounded)
+        if (Physics.Raycast(anchor.position, -transform.up, out hit, rayLength))
         {
-            rawGroundNormal = hit.normal;
-            groundedBuffer = 0.15f;
+            float offset = rayLength - hit.distance;
+            suspensionOffsets[index] = offset; // Save for visual update
+            
+            float vel = Vector3.Dot(rb.GetPointVelocity(anchor.position), transform.up);
+            float force = (offset * springStrength) - (vel * springDamper);
+            
+            rb.AddForceAtPosition(transform.up * force, anchor.position);
+            return true;
         }
-        else if (groundedBuffer <= 0)
+        
+        suspensionOffsets[index] = 0;
+        return false;
+    }
+
+    private void ApplyDrivingForces(Transform anchor)
+    {
+        if (rb.linearVelocity.magnitude > maxSpeed && moveInput > 0) return;
+        rb.AddForceAtPosition(transform.forward * moveInput * acceleration, anchor.position);
+    }
+
+    private void ApplySteeringAndFriction()
+    {
+        float speed = rb.linearVelocity.magnitude;
+        
+        // 1. Steering
+        if (speed > 1f)
         {
-            rawGroundNormal = Vector3.up;
+            float steerDir = Vector3.Dot(rb.linearVelocity, transform.forward) > 0 ? 1f : -1f;
+            float speedRatio = maxSpeed > 0 ? Mathf.Clamp01(speed / (maxSpeed * 0.5f)) : 0; 
+            
+            // Apply steering torque
+            if (Mathf.Abs(steerInput) > 0.01f)
+            {
+                rb.AddTorque(transform.up * steerInput * steeringStrength * steerDir * speedRatio, ForceMode.Force);
+            }
+            
+            // Damping logic for snappier response
+            Vector3 localAngularVel = transform.InverseTransformDirection(rb.angularVelocity);
+            
+            // If no input, or if steering in the opposite direction of current spin, apply heavy damping
+            bool isOpposing = steerInput != 0 && Mathf.Sign(steerInput * steerDir) != Mathf.Sign(localAngularVel.y);
+            if (Mathf.Abs(steerInput) <= 0.01f || isOpposing)
+            {
+                float multiplier = isOpposing ? 2f : 1f; // Damp even faster if steering against the turn
+                localAngularVel.y *= Mathf.Clamp01(1f - steeringDamping * multiplier * Time.fixedDeltaTime);
+                rb.angularVelocity = transform.TransformDirection(localAngularVel);
+            }
+}
+        else
+        {
+            // Kill angular velocity when stopped
+            rb.angularVelocity = Vector3.zero;
+        }
+
+        // 2. Lateral Friction (Anti-drift)
+        Vector3 lateralVel = transform.right * Vector3.Dot(rb.linearVelocity, transform.right);
+        float stableFriction = Mathf.Clamp01(lateralFriction);
+        rb.AddForce(-lateralVel * stableFriction, ForceMode.VelocityChange);
+    }
+
+    private void UpdateWheelVisuals()
+    {
+        if (wheelVisuals == null || wheelVisuals.Length != 4) return;
+
+        float forwardSpeed = Vector3.Dot(rb.linearVelocity, transform.forward);
+        
+        // Safety check for radius to avoid division by zero (NaN)
+        float radius = Mathf.Max(0.01f, wheelRadius);
+        
+        // Accumulate spin (negated so positive speed = forward roll for the cylinder)
+        float deltaSpin = (forwardSpeed / radius) * Time.deltaTime * Mathf.Rad2Deg;
+        if (!float.IsNaN(deltaSpin))
+        {
+            currentSpinAngle += deltaSpin;
+            // Keep currentSpinAngle in reasonable range to avoid precision issues over time
+            currentSpinAngle %= 360f;
+        }
+
+        for (int i = 0; i < 4; i++)
+        {
+            if (wheelVisuals[i] == null) continue;
+
+            // 1. Suspension position (Local to Kart)
+            float visualOffset = Mathf.Max(0, suspensionOffsets[i] - radius);
+            float currentLength = suspensionRestLength - visualOffset;
+            wheelVisuals[i].localPosition = wheelAnchors[i].localPosition - Vector3.up * currentLength;
+
+            // 2. Base rotation
+            float steerAngle = (i < 2) ? steerInput * maxSteerVisualAngle : 0;
+            
+            // Spin: around the cylinder's height axis (local Y)
+            Quaternion spinRot = Quaternion.Euler(0, -currentSpinAngle, 0);
+            
+            // Tilt: Make the cylinder lie on its side along the X axis
+            Quaternion tiltRot = Quaternion.Euler(0, 0, 90f);
+            
+            // Steer: Rotate around the chassis up axis
+            Quaternion steerRot = Quaternion.Euler(0, steerAngle, 0);
+            
+            wheelVisuals[i].localRotation = steerRot * tiltRot * spinRot;
         }
     }
 
-    private void AlignVisuals()
+    private void ApplyVisualTilt()
     {
-        currentGroundNormal = Vector3.Slerp(currentGroundNormal, rawGroundNormal, 10f * Time.deltaTime);
-
-        Quaternion targetRotation = Quaternion.Euler(0, currentRotation, 0);
-        Vector3 projectedForward = Vector3.ProjectOnPlane(targetRotation * Vector3.forward, currentGroundNormal);
-        
-        if (projectedForward != Vector3.zero)
-        {
-            Quaternion finalRotation = Quaternion.LookRotation(projectedForward, currentGroundNormal);
-            visuals.rotation = Quaternion.Slerp(visuals.rotation, finalRotation, alignmentSpeed * Time.deltaTime);
-        }
+        if (visuals == null) return;
+        float targetTilt = -steerInput * visualTiltAngle;
+        Quaternion targetRot = Quaternion.Euler(0, 0, targetTilt);
+        visuals.localRotation = Quaternion.Slerp(visuals.localRotation, targetRot, Time.deltaTime * visualTiltSpeed);
     }
 }
