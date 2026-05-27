@@ -97,57 +97,48 @@ if (rb == null) rb = GetComponent<Rigidbody>();
         float rayLength = suspensionRestLength + radius;
         Vector3 worldUp = transform.up;
         
-        float totalOffset = 0;
-        int hitCount = 0;
-
-        // Sample ground at multiple points to smooth out geometry noise
-        for (int s = 0; s < suspensionSamples; s++)
+        RaycastHit hit;
+        if (Physics.Raycast(anchor.position, -worldUp, out hit, rayLength))
         {
-            Vector3 samplePos = anchor.position;
-            if (s > 0)
-            {
-                float angle = (s - 1) * (2f * Mathf.PI / (suspensionSamples - 1));
-                Vector3 ringOffset = (transform.forward * Mathf.Cos(angle) + transform.right * Mathf.Sin(angle)) * sampleRadius;
-                samplePos += ringOffset;
-            }
-
-            RaycastHit hit;
-            if (Physics.Raycast(samplePos, -worldUp, out hit, rayLength))
-            {
-                totalOffset += (rayLength - hit.distance);
-                hitCount++;
-            }
-        }
-
-        if (hitCount > 0)
-        {
-            float avgOffset = totalOffset / hitCount;
-            suspensionOffsets[index] = avgOffset; // Save for visual update
+            float compression = rayLength - hit.distance;
+            suspensionOffsets[index] = compression; // Save for visual update
             
-            Vector3 velocityAtPoint = rb.GetPointVelocity(anchor.position);
+            // Substepping logic: Iteratively integrate the suspension force
+            // to prevent high spring/damper values from causing instability.
+            float totalSubstepForce = 0;
             
-            float springForce = avgOffset * springStrength;
-            float dampingForce = 0;
+            // Corner mass approximation (assuming even distribution for suspension stability)
+            float cornerMass = rb.mass / wheelAnchors.Length;
+            float substepDt = Time.fixedDeltaTime / suspensionSubsteps;
             
-            if (suspensionSubsteps > 1)
+            // Initial state for integration
+            float currentCompression = compression;
+            float currentVelocity = Vector3.Dot(rb.GetPointVelocity(anchor.position), worldUp);
+
+            for (int i = 0; i < suspensionSubsteps; i++)
             {
-                float stepVelocity = Vector3.Dot(velocityAtPoint, worldUp);
-                float substepDamping = 0;
-                for (int i = 0; i < suspensionSubsteps; i++)
-                {
-                    substepDamping += stepVelocity * springDamper;
-                }
-                dampingForce = substepDamping / suspensionSubsteps;
-            }
-            else
-            {
-                dampingForce = Vector3.Dot(velocityAtPoint, worldUp) * springDamper;
+                // Calculate force for this substep
+                float springForce = currentCompression * springStrength;
+                float dampingForce = currentVelocity * springDamper;
+                float force = springForce - dampingForce;
+
+                // Accumulate the fraction of force
+                totalSubstepForce += force;
+
+                // Update the state for the next substep (Semi-implicit Euler)
+                float acceleration = force / cornerMass;
+                currentVelocity += acceleration * substepDt;
+                currentCompression -= currentVelocity * substepDt;
             }
 
-            float totalForce = springForce - dampingForce;
+            // Average the accumulated forces
+            float integratedForce = totalSubstepForce / suspensionSubsteps;
 
-            float finalForce = Mathf.Lerp(prevSuspensionForces[index], totalForce, 1f - forceSmoothing);
+            // Apply Low-Pass Filter (Force Smoothing)
+            float finalForce = Mathf.Lerp(prevSuspensionForces[index], integratedForce, 1f - forceSmoothing);
             prevSuspensionForces[index] = finalForce;
+
+            // Clamp to zero to ensure suspension only pushes up
             finalForce = Mathf.Max(0, finalForce);
             
             rb.AddForceAtPosition(worldUp * finalForce, anchor.position, ForceMode.Force);
