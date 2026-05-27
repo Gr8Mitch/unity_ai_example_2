@@ -219,8 +219,11 @@ if (rb == null) rb = GetComponent<Rigidbody>();
             if (wheelVisuals[i] == null) continue;
 
             // 1. Suspension position (Local to Kart)
-            float visualOffset = Mathf.Max(0, suspensionOffsets[i] - radius);
-            float currentLength = suspensionRestLength - visualOffset;
+            // compression = (restLength + radius) - hitDistance
+            // We want wheel center at: hitDistance - radius
+            float hitDistance = (suspensionRestLength + radius) - suspensionOffsets[i];
+            float currentLength = hitDistance - radius;
+            
             wheelVisuals[i].localPosition = wheelAnchors[i].localPosition - Vector3.up * currentLength;
 
             // 2. Base rotation
