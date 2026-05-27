@@ -19,11 +19,13 @@ public class KartController : MonoBehaviour
     [Header("Physics Settings")]
     [SerializeField] private Rigidbody rb;
     [SerializeField] private float acceleration = 8000f;
+    [SerializeField] private AnimationCurve accelerationCurve = AnimationCurve.Linear(0, 1, 1, 0.5f);
     [SerializeField] private float maxSpeed = 50f;
     [SerializeField] private float steeringStrength = 5000f;
+    [SerializeField] private AnimationCurve steeringCurve = AnimationCurve.Linear(0, 1, 1, 0.5f);
     [SerializeField] private float steeringDamping = 10f;
     [SerializeField] private float lateralFriction = 0.95f; // 0 to 1 for VelocityChange
-    [SerializeField] private float gravityMultiplier = 2f;
+[SerializeField] private float gravityMultiplier = 2f;
     [SerializeField] private float downforce = 15000f;
     [SerializeField] private float steeringDownforce = 5000f;
     [SerializeField] private float antiRollForce = 5000f;
@@ -66,13 +68,14 @@ public class KartController : MonoBehaviour
 
     void FixedUpdate()
     {
+        float speed = rb.linearVelocity.magnitude;
         bool isGrounded = false;
         for (int i = 0; i < wheelAnchors.Length; i++)
         {
             if (ApplySuspension(i))
             {
                 isGrounded = true;
-                ApplyDrivingForces(wheelAnchors[i]);
+                ApplyDrivingForces(wheelAnchors[i], speed);
             }
         }
 
@@ -80,10 +83,8 @@ public class KartController : MonoBehaviour
         ApplyAntiRollBar(0, 1); // Front
         ApplyAntiRollBar(2, 3); // Rear
 
-        float speed = rb.linearVelocity.magnitude;
-
         // 2. Extra Gravity and Downforce
-        if (!isGrounded)
+if (!isGrounded)
         {
             rb.AddForce(Vector3.down * Physics.gravity.magnitude * gravityMultiplier, ForceMode.Acceleration);
         }
@@ -109,10 +110,12 @@ public class KartController : MonoBehaviour
 
         float antiRollForceAmount = (travelL - travelR) * antiRollForce;
 
+        // If Left is more compressed (travelL > travelR), antiRollForceAmount is positive.
+        // We should push the Left side UP and the Right side DOWN to equalize.
         if (suspensionOffsets[indexL] > 0)
-            rb.AddForceAtPosition(transform.up * -antiRollForceAmount, wheelAnchors[indexL].position);
+            rb.AddForceAtPosition(transform.up * antiRollForceAmount, wheelAnchors[indexL].position);
         if (suspensionOffsets[indexR] > 0)
-            rb.AddForceAtPosition(transform.up * antiRollForceAmount, wheelAnchors[indexR].position);
+            rb.AddForceAtPosition(transform.up * -antiRollForceAmount, wheelAnchors[indexR].position);
     }
 
     private bool ApplySuspension(int index)
@@ -175,10 +178,14 @@ public class KartController : MonoBehaviour
         return false;
     }
 
-    private void ApplyDrivingForces(Transform anchor)
+    private void ApplyDrivingForces(Transform anchor, float speed)
     {
-        if (rb.linearVelocity.magnitude > maxSpeed && moveInput > 0) return;
-        rb.AddForceAtPosition(transform.forward * moveInput * acceleration, anchor.position);
+        if (speed > maxSpeed && moveInput > 0) return;
+        
+        float speedRatio = maxSpeed > 0 ? Mathf.Clamp01(speed / maxSpeed) : 0;
+        float curveAccel = accelerationCurve.Evaluate(speedRatio);
+        
+        rb.AddForceAtPosition(transform.forward * moveInput * acceleration * curveAccel, anchor.position, ForceMode.Force);
     }
 
     private void ApplySteeringAndFriction()
@@ -189,14 +196,15 @@ public class KartController : MonoBehaviour
         if (speed > 1f)
         {
             float steerDir = Vector3.Dot(rb.linearVelocity, transform.forward) > 0 ? 1f : -1f;
-            float speedRatio = maxSpeed > 0 ? Mathf.Clamp01(speed / (maxSpeed * 0.5f)) : 0; 
+            float speedRatio = maxSpeed > 0 ? Mathf.Clamp01(speed / maxSpeed) : 0; 
+            float curveSteer = steeringCurve.Evaluate(speedRatio);
             
             // Apply steering torque
             if (Mathf.Abs(steerInput) > 0.01f)
             {
-                rb.AddTorque(transform.up * steerInput * steeringStrength * steerDir * speedRatio, ForceMode.Force);
+                rb.AddTorque(transform.up * steerInput * steeringStrength * steerDir * curveSteer, ForceMode.Force);
             }
-            
+
             // Damping logic for snappier response
             Vector3 localAngularVel = transform.InverseTransformDirection(rb.angularVelocity);
             

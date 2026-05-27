@@ -464,6 +464,10 @@ MonoBehaviour:
   springStrength: 35000
   springDamper: 1500
   wheelRadius: 0.3
+  suspensionSubsteps: 4
+  suspensionSamples: 3
+  sampleRadius: 0.15
+  forceSmoothing: 0.5
   wheelAnchors:
   - {fileID: 7983271052432055651}
   - {fileID: 8708014657809021278}
@@ -471,11 +475,81 @@ MonoBehaviour:
   - {fileID: 2004829975411136323}
   rb: {fileID: 4344281559680019039}
   acceleration: 4000
+  accelerationCurve:
+    serializedVersion: 2
+    m_Curve:
+    - serializedVersion: 3
+      time: 0
+      value: 1
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    - serializedVersion: 3
+      time: 0.5
+      value: 0.8
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    - serializedVersion: 3
+      time: 1
+      value: 0.4
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    m_PreInfinity: 2
+    m_PostInfinity: 2
+    m_RotationOrder: 4
   maxSpeed: 50
   steeringStrength: 3000
+  steeringCurve:
+    serializedVersion: 2
+    m_Curve:
+    - serializedVersion: 3
+      time: 0
+      value: 0.5
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    - serializedVersion: 3
+      time: 0.2
+      value: 1
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    - serializedVersion: 3
+      time: 1
+      value: 0.6
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    m_PreInfinity: 2
+    m_PostInfinity: 2
+    m_RotationOrder: 4
+  steeringDamping: 10
   lateralFriction: 40
   gravityMultiplier: 3
   downforce: 15000
+  steeringDownforce: 5000
+  antiRollForce: 5000
+  centerOfMassOffset: {x: 0, y: -0.5, z: 0}
   wheelVisuals:
   - {fileID: 8661939403053317876}
   - {fileID: 3142384213896051526}
