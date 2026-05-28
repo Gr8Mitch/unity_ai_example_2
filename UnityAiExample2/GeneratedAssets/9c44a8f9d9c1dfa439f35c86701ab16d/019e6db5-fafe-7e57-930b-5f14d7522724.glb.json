@@ -1,0 +1,23 @@
+{
+    "asset": "9c44a8f9d9c1dfa439f35c86701ab16d",
+    "fileName": "019e6db5-fafe-7e57-930b-5f14d7522724.glb",
+    "prompt": "High-performance arcade kart racer, vibrant and stylized 3D model. The kart features a sleek chassis, four separate wheels, and a central steering wheel. THIS IS IMPORTANT: The four wheels and the steering wheel must be distinct, independent submeshes from the main chassis to allow for independent rotation and steering in-engine. Match the vibrant cartoon style and color palette of the provided reference image. Clean topology, game-ready low-poly aesthetic.",
+    "negativePrompt": "",
+    "model": "model3d-tripo3-1",
+    "modelName": "Tripo 3.1",
+    "customSeed": -1,
+    "w3CTraceId": "",
+    "feedback": 0,
+    "refinementMode": "Generation",
+    "promptImageReferenceGuid": "13a8b8189d9e0aa43bca307eec2d735e",
+    "modelReferenceGuid": "",
+    "multiviewFrontGuid": "",
+    "multiviewBackGuid": "",
+    "multiviewLeftGuid": "",
+    "multiviewRightGuid": "",
+    "multiviewTopGuid": "",
+    "multiviewBottomGuid": "",
+    "multiviewLeftFrontGuid": "",
+    "multiviewRightFrontGuid": "",
+    "faceLimit": -1
+}

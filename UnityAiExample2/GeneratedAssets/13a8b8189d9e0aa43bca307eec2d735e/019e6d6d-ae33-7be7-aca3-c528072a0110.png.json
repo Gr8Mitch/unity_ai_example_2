@@ -1,0 +1,28 @@
+{
+    "asset": "13a8b8189d9e0aa43bca307eec2d735e",
+    "fileName": "019e6d6d-ae33-7be7-aca3-c528072a0110.png",
+    "prompt": "\"A stylized racing go-kart in the art style of Mario Kart 8. The vehicle features a vibrant red chassis with a sleek, rounded aerodynamic design and polished chrome accents. It has oversized chunky black rubber tires and a small, detailed steering wheel. The art style is high-quality 3D stylized, characterized by clean surfaces, vibrant saturated colors, and cheerful studio lighting. 3/4 perspective view, isolated on a solid neutral background.\"",
+    "negativePrompt": "",
+    "model": "flux-2-dev",
+    "modelName": "Flux 2 (Dev)",
+    "customSeed": -1,
+    "w3CTraceId": "",
+    "feedback": 0,
+    "refinementMode": "Generation",
+    "pixelateTargetSize": 0,
+    "pixelateKeepImageSize": false,
+    "pixelatePixelBlockSize": 0,
+    "pixelatePixelGridSize": 0,
+    "pixelateMode": 0,
+    "pixelateOutlineThickness": 0,
+    "doodles": {
+        "m_Items": []
+    },
+    "upscaleFactor": 0,
+    "dimensions": {
+        "width": 1024,
+        "height": 1024
+    },
+    "spriteSheet": false,
+    "duration": 0.0
+}
