@@ -29,7 +29,11 @@ public class KartController : MonoBehaviour
     [SerializeField] private float downforce = 15000f;
     [SerializeField] private float steeringDownforce = 5000f;
     [SerializeField] private float antiRollForce = 5000f;
+    [SerializeField] private float stickyForce = 8000f;
     [SerializeField] private Vector3 centerOfMassOffset = new Vector3(0, -0.5f, 0);
+
+    private Vector3 averageNormal = Vector3.up;
+    private int groundedWheelsCount = 0;
 
     [Header("Wheel Visuals")]
 [SerializeField] private Transform[] wheelVisuals; // FL, FR, RL, RR
@@ -70,6 +74,10 @@ public class KartController : MonoBehaviour
     {
         float speed = rb.linearVelocity.magnitude;
         bool isGrounded = false;
+        
+        averageNormal = Vector3.zero;
+        groundedWheelsCount = 0;
+
         for (int i = 0; i < wheelAnchors.Length; i++)
         {
             if (ApplySuspension(i))
@@ -83,20 +91,34 @@ public class KartController : MonoBehaviour
         ApplyAntiRollBar(0, 1); // Front
         ApplyAntiRollBar(2, 3); // Rear
 
-        // 2. Extra Gravity and Downforce
-if (!isGrounded)
+        // 2. Extra Gravity and Sticky Force
+        if (isGrounded && groundedWheelsCount > 0)
         {
-            rb.AddForce(Vector3.down * Physics.gravity.magnitude * gravityMultiplier, ForceMode.Acceleration);
+            averageNormal /= groundedWheelsCount;
+            averageNormal.Normalize();
+
+            // Blend world gravity with surface-normal aligned gravity
+            Vector3 worldGravity = Vector3.down * Physics.gravity.magnitude;
+            Vector3 surfaceGravity = -averageNormal * Physics.gravity.magnitude;
+            
+            // The steeper the hill, the more we prefer surface gravity to prevent sliding
+            float slopeAngle = Vector3.Angle(Vector3.up, averageNormal);
+            float gravityBlend = Mathf.Clamp01(slopeAngle / 45f);
+            Vector3 blendedGravity = Vector3.Lerp(worldGravity, surfaceGravity, gravityBlend);
+
+            rb.AddForce(blendedGravity * (gravityMultiplier - 1f), ForceMode.Acceleration);
+
+            // Apply Sticky Force (always pushing into the surface normal)
+            float speedFactor = maxSpeed > 0 ? Mathf.Clamp01(speed / maxSpeed) : 0;
+            float finalStickyForce = stickyForce + (downforce * speedFactor);
+            finalStickyForce += Mathf.Abs(steerInput) * steeringDownforce;
+            
+            rb.AddForce(-averageNormal * finalStickyForce, ForceMode.Force);
         }
         else
         {
-            // Base downforce
-            float finalDownforce = downforce;
-            
-            // Extra downforce when steering to keep wheels planted
-            finalDownforce += Mathf.Abs(steerInput) * steeringDownforce;
-            
-            rb.AddForce(-transform.up * finalDownforce * (speed / maxSpeed), ForceMode.Force);
+            // Just apply extra world gravity when in air
+            rb.AddForce(Vector3.down * Physics.gravity.magnitude * (gravityMultiplier - 1f), ForceMode.Acceleration);
         }
 
         ApplySteeringAndFriction();
