@@ -21,8 +21,8 @@ public class KartController : MonoBehaviour
     [SerializeField] private float acceleration = 8000f;
     [SerializeField] private AnimationCurve accelerationCurve = AnimationCurve.Linear(0, 1, 1, 0.5f);
     [SerializeField] private float maxSpeed = 50f;
-    [SerializeField] private float steeringStrength = 5000f;
-    [SerializeField] private AnimationCurve steeringCurve = AnimationCurve.Linear(0, 1, 1, 0.5f);
+    [SerializeField] private float steeringStrength = 1000f;
+    [SerializeField] private AnimationCurve steeringRadiusCurve = AnimationCurve.Linear(0, 5, 50, 40);
     [SerializeField] private float steeringDamping = 10f;
     [SerializeField] private float lateralFriction = 0.95f; // 0 to 1 for VelocityChange
 [SerializeField] private float gravityMultiplier = 2f;
@@ -193,21 +193,26 @@ if (!isGrounded)
         float speed = rb.linearVelocity.magnitude;
         
         // 1. Steering
-        if (speed > 1f)
+        if (speed > 0.1f)
         {
             float steerDir = Vector3.Dot(rb.linearVelocity, transform.forward) > 0 ? 1f : -1f;
-            float speedRatio = maxSpeed > 0 ? Mathf.Clamp01(speed / maxSpeed) : 0; 
-            float curveSteer = steeringCurve.Evaluate(speedRatio);
             
-            // Apply steering torque
-            if (Mathf.Abs(steerInput) > 0.01f)
-            {
-                rb.AddTorque(transform.up * steerInput * steeringStrength * steerDir * curveSteer, ForceMode.Force);
-            }
+            // Calculate target angular velocity based on steering radius from velocity
+            float radius = steeringRadiusCurve.Evaluate(speed);
+            radius = Mathf.Max(radius, 0.1f); // Avoid division by zero
+            
+            float targetAngularVel = (speed / radius) * steerInput * steerDir;
 
-            // Damping logic for snappier response
+            // Damping and response logic
             Vector3 localAngularVel = transform.InverseTransformDirection(rb.angularVelocity);
             
+            if (Mathf.Abs(steerInput) > 0.01f)
+            {
+                // Apply torque to reach target angular velocity
+                float angularVelError = targetAngularVel - localAngularVel.y;
+                rb.AddTorque(transform.up * angularVelError * steeringStrength, ForceMode.Force);
+            }
+
             // If no input, or if steering in the opposite direction of current spin, apply heavy damping
             bool isOpposing = steerInput != 0 && Mathf.Sign(steerInput * steerDir) != Mathf.Sign(localAngularVel.y);
             if (Mathf.Abs(steerInput) <= 0.01f || isOpposing)
@@ -216,7 +221,7 @@ if (!isGrounded)
                 localAngularVel.y *= Mathf.Clamp01(1f - steeringDamping * multiplier * Time.fixedDeltaTime);
                 rb.angularVelocity = transform.TransformDirection(localAngularVel);
             }
-}
+        }
         else
         {
             // Kill angular velocity when stopped
